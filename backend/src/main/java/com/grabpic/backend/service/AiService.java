@@ -25,6 +25,7 @@ public class AiService {
 
   private final RestTemplate restTemplate;
   private final AiProperties aiProperties;
+  private final TokenService tokenService;
 
   // -------------------------
   // PROCESS
@@ -59,7 +60,7 @@ public class AiService {
           new ParameterizedTypeReference<Map<String, Object>>() {
           });
 
-      MatchBuckets buckets = mapToBuckets(response.getBody());
+      MatchBuckets buckets = mapToBuckets(response.getBody(), eventId);
       return paginate(buckets, page, size);
 
     } catch (Exception e) {
@@ -68,15 +69,6 @@ public class AiService {
     }
   }
 
-  // -------------------------
-  // FETCH IMAGE (kept for compatibility)
-  // -------------------------
-  public byte[] fetchImage(String eventId, String imageId) {
-    String url = buildImageUrl(eventId, imageId);
-
-    ResponseEntity<byte[]> response = restTemplate.getForEntity(url, byte[].class);
-    return response.getBody();
-  }
 
   // -------------------------
   // DOWNLOAD ALL (ZIP)
@@ -98,21 +90,15 @@ public class AiService {
   // -------------------------
   private String buildApiUrl(String endpoint, String eventId) {
     return String.format("%s/%s/%s",
-        trimSlash(aiProperties.getBaseUrl()),
+        trimSlash(aiProperties.getInternalBaseUrl()),
         trimSlash(endpoint),
         eventId);
   }
 
-  private String buildImageUrl(String eventId, String imageId) {
-    return String.format("%s/images/%s/images/%s",
-        trimSlash(aiProperties.getBaseUrl()),
-        eventId,
-        imageId);
-  }
 
   private String buildDownloadUrl(String eventId) {
     return String.format("%s/events/%s/download",
-        trimSlash(aiProperties.getBaseUrl()),
+        trimSlash(aiProperties.getInternalBaseUrl()),
         eventId);
   }
 
@@ -171,7 +157,7 @@ public class AiService {
   // -------------------------
   // MAP RAW → BUCKETS
   // -------------------------
-  private MatchBuckets mapToBuckets(Map<String, Object> body) {
+  private MatchBuckets mapToBuckets(Map<String, Object> body, String eventId) {
 
     if (body == null) {
       throw new RuntimeException("Empty response from AI service");
@@ -183,19 +169,30 @@ public class AiService {
 
     List<Map<String, Object>> strong = safeList(body.get("strong_matches"));
     List<Map<String, Object>> weak = safeList(body.get("weak_matches"));
+    
     List<ImageMatch> strongMatches = strong.stream()
-        .map(m -> new ImageMatch(
-            (String) m.get("image_id"),
-            ((Number) m.get("score")).doubleValue()))
+        .map(m -> buildImageMatch(m, eventId))
         .toList();
 
     List<ImageMatch> weakMatches = weak.stream()
-        .map(m -> new ImageMatch(
-            (String) m.get("image_id"),
-            ((Number) m.get("score")).doubleValue()))
+        .map(m -> buildImageMatch(m, eventId))
         .toList();
 
     return new MatchBuckets(strongMatches, weakMatches);
+  }
+
+  private ImageMatch buildImageMatch(Map<String, Object> m, String eventId) {
+    String imageId = (String) m.get("image_id");
+    double score = ((Number) m.get("score")).doubleValue();
+    // Use 3 hours expiry
+    long expiryTs = (System.currentTimeMillis() / 1000L) + (3 * 3600);
+    String token = tokenService.generateToken(eventId, imageId, expiryTs);
+    String url = String.format("%s/images/%s/images/%s?token=%s",
+        trimSlash(aiProperties.getPublicBaseUrl()),
+        eventId,
+        imageId,
+        token);
+    return new ImageMatch(imageId, score, url);
   }
 
   @SuppressWarnings("unchecked")

@@ -8,6 +8,6 @@ import org.springframework.stereotype.Component;
 @Component
 @ConfigurationProperties(prefix = "ai")
 public class AiProperties {
-  private String baseUrl;
+  private String internalBaseUrl;
   private String publicBaseUrl;
 }

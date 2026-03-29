@@ -49,6 +49,12 @@ class Settings:
     BASE_DATA_DIR = os.getenv("BASE_DATA_DIR", "/app/data")
     QUERY_DIR = os.getenv("QUERY_DIR", "/app/query_data")
 
+    # -------------------------
+    # SECURITY & EXPIRY
+    # -------------------------
+    IMAGE_TOKEN_SECRET = os.getenv("IMAGE_TOKEN_SECRET", "defaultSecretKeyForTokensIfEnvMissing")
+    EVENT_EXPIRY_HOURS = int(os.getenv("EVENT_EXPIRY_HOURS", "3"))
+
 
 # Singleton instance (use everywhere)
 settings = Settings()

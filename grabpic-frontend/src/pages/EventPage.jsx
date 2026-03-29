@@ -1,6 +1,6 @@
 import { useParams } from "react-router-dom";
 import { useState, useRef, useCallback } from "react";
-import { searchImages, getImageUrl, downloadAllImages } from "../api/client";
+import { searchImages, downloadAllImages } from "../api/client";
 import { motion } from "framer-motion";
 import PageWrapper from "../components/PageWrapper";
 import RetroButton from "../components/RetroButton";
@@ -166,7 +166,7 @@ export default function EventPage() {
                   onClick={() => setSelectedIndex(flatIndex)}
                 >
                   <img
-                    src={getImageUrl(eventId, img.imageId)}
+                    src={img.url}
                     alt={`Match ${idx + 1}`}
                     className="image-grid__img"
                     loading="lazy"
@@ -195,7 +195,7 @@ export default function EventPage() {
                   onClick={() => setSelectedIndex(flatIndex)}
                 >
                   <img
-                    src={getImageUrl(eventId, img.imageId)}
+                    src={img.url}
                     alt={`Maybe ${idx + 1}`}
                     className="image-grid__img"
                     loading="lazy"
@@ -213,8 +213,8 @@ export default function EventPage() {
         selectedIndex={selectedIndex}
         onClose={() => setSelectedIndex(null)}
         onNavigate={setSelectedIndex}
-        getImageSrc={(img) => getImageUrl(eventId, img.imageId)}
-        getDownloadHref={(img) => getImageUrl(eventId, img.imageId)}
+        getImageSrc={(img) => img.url}
+        getDownloadHref={(img) => img.url}
       />
     </PageWrapper>
   );

@@ -27,12 +27,6 @@ public class EventService {
     return aiService.searchImages(eventId, files, page, size);
   }
 
-  // -------------------------
-  // FETCH IMAGE
-  // -------------------------
-  public byte[] fetchImage(String eventId, String imageId) {
-    return aiService.fetchImage(eventId, imageId);
-  }
 
   // -------------------------
   // VALIDATION

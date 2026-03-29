@@ -53,20 +53,6 @@ public class EventController {
     return ResponseEntity.ok(response);
   }
 
-  // -------------------------
-  // FETCH IMAGE (PROXY)
-  // -------------------------
-  @GetMapping("/{eventId}/images/{imageId}")
-  public ResponseEntity<byte[]> getImage(
-      @PathVariable String eventId,
-      @PathVariable String imageId) {
-    byte[] image = eventService.fetchImage(eventId, imageId);
-
-    return ResponseEntity
-        .ok()
-        .contentType(MediaType.IMAGE_JPEG)
-        .body(image);
-  }
 
   @GetMapping("/{eventId}/download")
   public ResponseEntity<byte[]> downloadAll(@PathVariable String eventId) {

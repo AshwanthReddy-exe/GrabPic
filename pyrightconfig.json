@@ -1,0 +1,11 @@
+{
+  "extraPaths": [
+    "./ai-service"
+  ],
+  "executionEnvironments": [
+    {
+      "root": "ai-service",
+      "extraPaths": ["."]
+    }
+  ]
+}

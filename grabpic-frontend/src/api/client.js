@@ -22,8 +22,6 @@ export const searchImages = (eventId, formData, page = 1, size = 20) =>
     },
   });
 
-export const getImageUrl = (eventId, imageId) =>
-  `${baseURL}/events/${eventId}/images/${imageId}`;
 
 export const downloadAllImages = (eventId) => {
   window.open(`${baseURL}/events/${eventId}/download`, "_blank");
