@@ -103,11 +103,42 @@ async def startup_event():
 
 
 # -------------------------
-# Helper: Save Upload
+# Helpers
 # -------------------------
 def save_upload_file(upload_file: UploadFile, destination: str):
     with open(destination, "wb") as buffer:
         shutil.copyfileobj(upload_file.file, buffer)
+
+def update_event_status(event_id: str, status: str):
+    event_dir = os.path.join(settings.BASE_DATA_DIR, "events", event_id)
+    status_path = os.path.join(event_dir, "status.json")
+    os.makedirs(event_dir, exist_ok=True)
+    with open(status_path, "w") as f:
+        json.dump({"status": status}, f)
+
+def background_process_images(event_id: str, image_paths: List[str]):
+    print(f"[PROCESS START] Event: {event_id}")
+    try:
+        update_event_status(event_id, "processing")
+        
+        event_dir = os.path.join(settings.BASE_DATA_DIR, "events", event_id)
+        index_dir = os.path.join(event_dir, "index")
+        os.makedirs(index_dir, exist_ok=True)
+
+        indexer = FaceIndexer(
+            settings.EMBEDDING_DIM,
+            index_path=os.path.join(index_dir, "faces.index"),
+            meta_path=os.path.join(index_dir, "meta.json")
+        )
+
+        processor = ImageProcessor(detector, embedder, indexer)
+        processor.process_images(image_paths)
+        
+        update_event_status(event_id, "completed")
+        print(f"[PROCESS DONE] Event: {event_id}")
+    except Exception as e:
+        print(f"[PROCESS FAILED] Event: {event_id}, Error: {e}")
+        update_event_status(event_id, "failed")
 
 
 # -------------------------
@@ -115,13 +146,12 @@ def save_upload_file(upload_file: UploadFile, destination: str):
 # -------------------------
 @app.post("/process/{event_id}")
 async def process_images(event_id: str, background_tasks: BackgroundTasks, files: List[UploadFile] = File(...)):
-    event_dir = os.path.join(BASE_DATA_DIR, "events", event_id)
+    event_dir = os.path.join(settings.BASE_DATA_DIR, "events", event_id)
     image_dir = os.path.join(event_dir, "images")
-    index_dir = os.path.join(event_dir, "index")
-
+    
     os.makedirs(image_dir, exist_ok=True)
-    os.makedirs(index_dir, exist_ok=True)
 
+    # Initialize meta.json if it doesn't exist
     event_meta_path = os.path.join(event_dir, "meta.json")
     if not os.path.exists(event_meta_path):
         now = int(time.time())
@@ -135,7 +165,6 @@ async def process_images(event_id: str, background_tasks: BackgroundTasks, files
             json.dump(meta_data, f)
 
     image_paths = []
-
     for file in files:
         filename = f"{uuid.uuid4()}.jpg"
         path = os.path.join(image_dir, filename)
@@ -147,19 +176,27 @@ async def process_images(event_id: str, background_tasks: BackgroundTasks, files
         if settings.USE_BLOB_STORAGE:
             background_tasks.add_task(upload_image, event_id, filename, path)
 
-    indexer = FaceIndexer(
-        settings.EMBEDDING_DIM,
-        index_path=os.path.join(index_dir, "faces.index"),
-        meta_path=os.path.join(index_dir, "meta.json")
-    )
-
-    processor = ImageProcessor(detector, embedder, indexer)
-    result = processor.process_images(image_paths)
+    # Trigger background processing
+    background_tasks.add_task(background_process_images, event_id, image_paths)
 
     return {
-        "event_id": event_id,
-        **result
+        "status": "processing_started",
+        "eventId": event_id
     }
+
+@app.get("/status/{event_id}")
+async def get_processing_status(event_id: str):
+    event_dir = os.path.join(settings.BASE_DATA_DIR, "events", event_id)
+    status_path = os.path.join(event_dir, "status.json")
+    
+    if not os.path.exists(status_path):
+        return {"status": "not_found"}
+        
+    try:
+        with open(status_path, "r") as f:
+            return json.load(f)
+    except Exception:
+        return {"status": "error"}
 
 
 # -------------------------
