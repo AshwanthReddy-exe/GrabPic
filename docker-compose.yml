@@ -1,0 +1,69 @@
+services:
+  ai-service:
+    build:
+      context: ./ai-service
+    container_name: grabpic-ai-service
+    ports:
+      - "8000:8000"
+
+    volumes:
+      - ai_data:/app/data
+      - ai_query:/app/query_data
+
+    environment:
+      - BASE_DATA_DIR=/app/data
+      - QUERY_DIR=/app/query_data
+      - IMAGE_TOKEN_SECRET=${IMAGE_TOKEN_SECRET:-my_super_secret_image_key_123}
+      - EVENT_EXPIRY_HOURS=${EVENT_EXPIRY_HOURS:-3}
+      - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING}
+      - AZURE_CONTAINER_NAME=${AZURE_CONTAINER_NAME}
+      - USE_BLOB_STORAGE=${USE_BLOB_STORAGE}
+    restart: unless-stopped
+    mem_limit: 2g
+    memswap_limit: 2g
+
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/docs || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+  backend:
+    build:
+      context: ./backend
+    container_name: grabpic-backend
+    ports:
+      - "8080:8080"
+
+    environment:
+      - AI_BASE_URL=http://ai-service:8000
+      - AI_PUBLIC_BASE_URL=${AI_PUBLIC_BASE_URL:-http://localhost:8000}
+      - IMAGE_TOKEN_SECRET=${IMAGE_TOKEN_SECRET:-my_super_secret_image_key_123}
+
+    depends_on:
+      ai-service:
+        condition: service_healthy
+
+    restart: unless-stopped
+    mem_limit: 512m
+    memswap_limit: 512m
+
+  frontend:
+    build:
+      context: ./grabpic-frontend
+      args:
+        - VITE_API_BASE_URL=/api
+    container_name: grabpic-frontend
+    ports:
+      - "5173:80"
+
+    depends_on:
+      - backend
+
+    restart: unless-stopped
+    mem_limit: 128m
+    memswap_limit: 128m
+
+volumes:
+  ai_data:
+  ai_query:
