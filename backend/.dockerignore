@@ -1,0 +1,17 @@
+.gradle
+build
+bin
+.settings
+.classpath
+.project
+.factorypath
+.git
+.gitignore
+*.iml
+.idea
+Failed
+Get
+Run
+Task
+mise.toml
+HELP.md
