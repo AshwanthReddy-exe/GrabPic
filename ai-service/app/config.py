@@ -55,6 +55,13 @@ class Settings:
     IMAGE_TOKEN_SECRET = os.getenv("IMAGE_TOKEN_SECRET", "defaultSecretKeyForTokensIfEnvMissing")
     EVENT_EXPIRY_HOURS = int(os.getenv("EVENT_EXPIRY_HOURS", "3"))
 
+    # -------------------------
+    # AZURE BLOB STORAGE
+    # -------------------------
+    AZURE_STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING", "")
+    AZURE_CONTAINER_NAME = os.getenv("AZURE_CONTAINER_NAME", "events")
+    USE_BLOB_STORAGE = os.getenv("USE_BLOB_STORAGE", "false").lower() == "true"
+
 
 # Singleton instance (use everywhere)
 settings = Settings()

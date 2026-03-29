@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Query, Request
+from fastapi import FastAPI, UploadFile, File, HTTPException, Query, Request, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
@@ -22,6 +22,7 @@ from app.services.processor import ImageProcessor
 from app.services.search_service import SearchService
 from app.core.security import verify_token
 from app.core.limiter import is_rate_limited
+from app.core.blob_service import upload_image, delete_event_blobs
 
 
 # -------------------------
@@ -81,14 +82,20 @@ async def cleanup_expired_events():
                                 meta = json.load(f)
                                 expires_at = meta.get("expiresAt", 0)
                                 if expires_at > 0 and now > expires_at:
-                                    print(f"[CLEANUP] Event {event_id} expired. Deleting...")
-                                    shutil.rmtree(event_dir)
+                                    try:
+                                        print(f"[CLEANUP] Event {event_id} expired. Deleting...")
+                                        # Delete from Azure Blob first
+                                        delete_event_blobs(event_id)
+                                        # Then local
+                                        shutil.rmtree(event_dir)
+                                    except Exception as event_err:
+                                        print(f"[CLEANUP] Failed to delete event {event_id}: {event_err}")
                             except json.JSONDecodeError:
-                                pass
+                                print(f"[CLEANUP] Failed to parse meta.json for {event_id}")
         except Exception as e:
             print(f"[CLEANUP] Error during cleanup: {e}")
             
-        await asyncio.sleep(600)  # run every 10 mins
+        await asyncio.sleep(600) 
 
 @app.on_event("startup")
 async def startup_event():
@@ -107,7 +114,7 @@ def save_upload_file(upload_file: UploadFile, destination: str):
 # API: Process Images
 # -------------------------
 @app.post("/process/{event_id}")
-async def process_images(event_id: str, files: List[UploadFile] = File(...)):
+async def process_images(event_id: str, background_tasks: BackgroundTasks, files: List[UploadFile] = File(...)):
     event_dir = os.path.join(BASE_DATA_DIR, "events", event_id)
     image_dir = os.path.join(event_dir, "images")
     index_dir = os.path.join(event_dir, "index")
@@ -135,6 +142,10 @@ async def process_images(event_id: str, files: List[UploadFile] = File(...)):
 
         save_upload_file(file, path)
         image_paths.append(path)
+        
+        # Dual-write: Upload to Azure Blob in background
+        if settings.USE_BLOB_STORAGE:
+            background_tasks.add_task(upload_image, event_id, filename, path)
 
     indexer = FaceIndexer(
         settings.EMBEDDING_DIM,

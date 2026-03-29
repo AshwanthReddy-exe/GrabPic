@@ -10,4 +10,7 @@ import org.springframework.stereotype.Component;
 public class AiProperties {
   private String internalBaseUrl;
   private String publicBaseUrl;
+  private String azureStorageConnectionString;
+  private String azureContainerName;
+  private boolean useBlobStorage;
 }

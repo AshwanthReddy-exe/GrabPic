@@ -13,6 +13,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.*;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
+import com.azure.storage.blob.*;
+import com.azure.storage.blob.sas.*;
+import jakarta.annotation.PostConstruct;
+import java.time.OffsetDateTime;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,6 +30,18 @@ public class AiService {
   private final RestTemplate restTemplate;
   private final AiProperties aiProperties;
   private final TokenService tokenService;
+  private BlobServiceClient blobServiceClient;
+
+  @PostConstruct
+  public void init() {
+    if (aiProperties.isUseBlobStorage() && 
+        aiProperties.getAzureStorageConnectionString() != null && 
+        !aiProperties.getAzureStorageConnectionString().isEmpty()) {
+      this.blobServiceClient = new BlobServiceClientBuilder()
+          .connectionString(aiProperties.getAzureStorageConnectionString())
+          .buildClient();
+    }
+  }
 
   // -------------------------
   // PROCESS
@@ -184,7 +200,12 @@ public class AiService {
   private ImageMatch buildImageMatch(Map<String, Object> m, String eventId) {
     String imageId = (String) m.get("image_id");
     double score = ((Number) m.get("score")).doubleValue();
-    // Use 3 hours expiry
+
+    if (aiProperties.isUseBlobStorage() && blobServiceClient != null) {
+      return new ImageMatch(imageId, score, buildSasUrl(eventId, imageId));
+    }
+
+    // Fallback: Use AI service signed URLs
     long expiryTs = (System.currentTimeMillis() / 1000L) + (3 * 3600);
     String token = tokenService.generateToken(eventId, imageId, expiryTs);
     String url = String.format("%s/images/%s/images/%s?token=%s",
@@ -193,6 +214,32 @@ public class AiService {
         imageId,
         token);
     return new ImageMatch(imageId, score, url);
+  }
+
+  private String buildSasUrl(String eventId, String imageId) {
+    try {
+      String blobPath = String.format("events/%s/images/%s", eventId, imageId);
+      BlobClient blobClient = blobServiceClient
+          .getBlobContainerClient(aiProperties.getAzureContainerName())
+          .getBlobClient(blobPath);
+
+      BlobSasPermission permission = new BlobSasPermission().setReadPermission(true);
+      OffsetDateTime expiryTime = OffsetDateTime.now().plusMinutes(10);
+      BlobServiceSasSignatureValues values = new BlobServiceSasSignatureValues(expiryTime, permission);
+
+      String sasToken = blobClient.generateSas(values);
+      return String.format("%s?%s", blobClient.getBlobUrl(), sasToken);
+    } catch (Exception e) {
+      log.error("Failed to generate SAS URL for image {}", imageId, e);
+      // Fallback: Generate AI service signed URL
+      long expiryTs = (System.currentTimeMillis() / 1000L) + (3 * 3600);
+      String token = tokenService.generateToken(eventId, imageId, expiryTs);
+      return String.format("%s/images/%s/images/%s?token=%s",
+          trimSlash(aiProperties.getPublicBaseUrl()),
+          eventId,
+          imageId,
+          token);
+    }
   }
 
   @SuppressWarnings("unchecked")
