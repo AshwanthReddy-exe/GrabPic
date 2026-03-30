@@ -137,7 +137,9 @@ export default function CreateEvent() {
             <DropZone
               label="Upload Event Photos"
               sublabel="Drag & drop or click to browse"
-              onFiles={setFiles}
+              onFiles={(newFiles) => setFiles((prev) => [...prev, ...newFiles])}
+              files={files}
+              onClear={() => setFiles([])}
               className="mb-16"
             />
 

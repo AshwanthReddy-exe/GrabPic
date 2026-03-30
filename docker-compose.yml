@@ -39,7 +39,9 @@ services:
       - AI_BASE_URL=http://ai-service:8000
       - AI_PUBLIC_BASE_URL=${AI_PUBLIC_BASE_URL:-http://localhost:8000}
       - IMAGE_TOKEN_SECRET=${IMAGE_TOKEN_SECRET:-my_super_secret_image_key_123}
-
+      - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING}
+      - AZURE_CONTAINER_NAME=${AZURE_CONTAINER_NAME}
+      - USE_BLOB_STORAGE=true
     depends_on:
       ai-service:
         condition: service_healthy

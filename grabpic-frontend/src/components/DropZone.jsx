@@ -11,10 +11,11 @@ export default function DropZone({
   multiple = true,
   maxFiles,
   onFiles,
+  files = [], // Allow parent to control/pass files
+  onClear,
   className,
 }) {
   const [dragActive, setDragActive] = useState(false);
-  const [selectedFiles, setSelectedFiles] = useState([]);
   const inputRef = useRef(null);
 
   const handleDrag = (e) => {
@@ -28,13 +29,9 @@ export default function DropZone({
   };
 
   const processFiles = (fileList) => {
-    let files = Array.from(fileList);
-    if (files.length === 0) return;
-    if (maxFiles && files.length > maxFiles) {
-      files = files.slice(0, maxFiles);
-    }
-    setSelectedFiles(files);
-    onFiles?.(files);
+    let newFiles = Array.from(fileList);
+    if (newFiles.length === 0) return;
+    onFiles?.(newFiles);
   };
 
   const handleDrop = (e) => {
@@ -49,8 +46,8 @@ export default function DropZone({
   };
 
   const previews = useMemo(() => {
-    return selectedFiles.slice(0, 6).map((file) => URL.createObjectURL(file));
-  }, [selectedFiles]);
+    return files.slice(0, 6).map((file) => URL.createObjectURL(file));
+  }, [files]);
 
   return (
     <div
@@ -73,10 +70,18 @@ export default function DropZone({
       <div className="dropzone__label">{label}</div>
       {sublabel && <div className="dropzone__sublabel">{sublabel}</div>}
 
-      {selectedFiles.length > 0 && (
+      {files.length > 0 && (
         <>
           <div className="dropzone__sublabel mt-8">
-            {selectedFiles.length} file{selectedFiles.length > 1 ? "s" : ""} selected
+            {files.length} file{files.length > 1 ? "s" : ""} selected
+            {onClear && (
+              <span 
+                onClick={(e) => { e.stopPropagation(); onClear(); }}
+                style={{ marginLeft: '12px', color: 'var(--accent-magenta)', cursor: 'pointer', textDecoration: 'underline' }}
+              >
+                Clear
+              </span>
+            )}
           </div>
           {previews.length > 0 && (
             <div className="dropzone__previews">

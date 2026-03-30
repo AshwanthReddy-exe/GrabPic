@@ -27,20 +27,25 @@ export default function EventPage() {
 
   const observerRef = useRef();
 
-  // ---- FILE HANDLER (AUTO SEARCH) ----
-  const handleFiles = async (fileList) => {
+  // ---- FILE HANDLER (BUFFERED) ----
+  const handleFiles = (fileList) => {
     if (fileList.length === 0) return;
-    if (fileList.length > 4) {
-      alert("Max 4 selfies allowed");
-      return;
-    }
+    
+    // Append new files and limit to 4
+    setFiles((prev) => {
+      const combined = [...prev, ...fileList];
+      if (combined.length > 4) {
+        alert("Max 4 selfies allowed");
+        return combined.slice(0, 4);
+      }
+      return combined;
+    });
 
-    setFiles(fileList);
-    setPage(1);
+    // Reset results when building a new query
     setImages({ strong: [], weak: [] });
     setAllImagesFlat([]);
-
-    await performSearch(fileList, 1);
+    setPage(1);
+    setHasMore(false);
   };
 
   // ---- SEARCH ----
@@ -124,11 +129,39 @@ export default function EventPage() {
       <motion.div {...fadeUp} className="w-full mb-24">
         <DropZone
           label="Upload Your Selfie"
-          sublabel="1–4 photos · drag & drop or click"
+          sublabel="Capture or select 2–4 photos for best results"
           maxFiles={4}
           onFiles={handleFiles}
           accept="image/*"
+          files={files}
+          onClear={() => setFiles([])}
         />
+      </motion.div>
+
+      {/* Search Button & Feedback */}
+      <motion.div {...fadeUp} className="flex flex-col items-center mb-32">
+        {files.length > 0 && (
+          <p 
+            style={{ 
+              fontSize: "14px", 
+              color: files.length < 2 ? "var(--text-muted)" : "var(--accent-cyan)",
+              marginBottom: "16px",
+              letterSpacing: "0.05em"
+            }}
+          >
+            {files.length === 1 
+              ? "Add 1–2 more photos for better results" 
+              : "Ready to search"}
+          </p>
+        )}
+        <RetroButton 
+          variant="primary" 
+          onClick={() => performSearch(files, 1)}
+          disabled={files.length < 2 || loading}
+          style={{ minWidth: "200px" }}
+        >
+          {loading ? "Searching..." : "🔍 Search My Photos"}
+        </RetroButton>
       </motion.div>
 
       {/* Download All */}

@@ -22,7 +22,7 @@ from app.services.processor import ImageProcessor
 from app.services.search_service import SearchService
 from app.core.security import verify_token
 from app.core.limiter import is_rate_limited
-from app.core.blob_service import upload_image, delete_event_blobs
+from app.core.blob_service import upload_image_bytes, delete_event_blobs, generate_download_sas
 
 
 # -------------------------
@@ -105,9 +105,6 @@ async def startup_event():
 # -------------------------
 # Helpers
 # -------------------------
-def save_upload_file(upload_file: UploadFile, destination: str):
-    with open(destination, "wb") as buffer:
-        shutil.copyfileobj(upload_file.file, buffer)
 
 def update_event_status(event_id: str, status: str):
     event_dir = os.path.join(settings.BASE_DATA_DIR, "events", event_id)
@@ -116,7 +113,7 @@ def update_event_status(event_id: str, status: str):
     with open(status_path, "w") as f:
         json.dump({"status": status}, f)
 
-def background_process_images(event_id: str, image_paths: List[str]):
+def background_process_images(event_id: str, images_data: list):
     print(f"[PROCESS START] Event: {event_id}")
     try:
         update_event_status(event_id, "processing")
@@ -132,7 +129,7 @@ def background_process_images(event_id: str, image_paths: List[str]):
         )
 
         processor = ImageProcessor(detector, embedder, indexer)
-        processor.process_images(image_paths)
+        processor.process_images(images_data)
         
         update_event_status(event_id, "completed")
         print(f"[PROCESS DONE] Event: {event_id}")
@@ -147,9 +144,10 @@ def background_process_images(event_id: str, image_paths: List[str]):
 @app.post("/process/{event_id}")
 async def process_images(event_id: str, background_tasks: BackgroundTasks, files: List[UploadFile] = File(...)):
     event_dir = os.path.join(settings.BASE_DATA_DIR, "events", event_id)
-    image_dir = os.path.join(event_dir, "images")
     
-    os.makedirs(image_dir, exist_ok=True)
+    # Ensure required directories exist before writing any file
+    os.makedirs(event_dir, exist_ok=True)
+    os.makedirs(os.path.join(event_dir, "index"), exist_ok=True)
 
     # Initialize meta.json if it doesn't exist
     event_meta_path = os.path.join(event_dir, "meta.json")
@@ -164,20 +162,19 @@ async def process_images(event_id: str, background_tasks: BackgroundTasks, files
         with open(event_meta_path, "w") as f:
             json.dump(meta_data, f)
 
-    image_paths = []
+    images_data = []
     for file in files:
         filename = f"{uuid.uuid4()}.jpg"
-        path = os.path.join(image_dir, filename)
-
-        save_upload_file(file, path)
-        image_paths.append(path)
+        content = await file.read()
+        
+        images_data.append((filename, content))
         
         # Dual-write: Upload to Azure Blob in background
         if settings.USE_BLOB_STORAGE:
-            background_tasks.add_task(upload_image, event_id, filename, path)
+            background_tasks.add_task(upload_image_bytes, event_id, filename, content)
 
     # Trigger background processing
-    background_tasks.add_task(background_process_images, event_id, image_paths)
+    background_tasks.add_task(background_process_images, event_id, images_data)
 
     return {
         "status": "processing_started",
@@ -265,26 +262,19 @@ async def search_images(event_id: str, files: List[UploadFile] = File(...)):
 # -------------------------
 # API: Download Event Images
 # -------------------------
-@app.get("/events/{event_id}/download")
-async def download_event_images(event_id: str):
-    event_dir = os.path.join(BASE_DATA_DIR, "events", event_id, "images")
-
-    if not os.path.exists(event_dir):
-        return {"error": "Invalid event_id"}
-
-    zip_buffer = io.BytesIO()
-
-    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-        for file_name in os.listdir(event_dir):
-            file_path = os.path.join(event_dir, file_name)
-            zip_file.write(file_path, arcname=file_name)
-
-    zip_buffer.seek(0)
-
-    return StreamingResponse(
-        zip_buffer,
-        media_type="application/octet-stream",
-        headers={
-            "Content-Disposition": f"attachment; filename={event_id}.zip"
-        }
-    )
+# -------------------------
+# API: Download Event Images
+# -------------------------
+@app.get("/download/{blob_name:path}")
+async def download_image(blob_name: str):
+    """
+    Generates a secure SAS URL for direct downloading from Azure Blob Storage.
+    The Content-Disposition is set to attachment for direct browser download.
+    """
+    try:
+        url = generate_download_sas(blob_name)
+        return {"url": url}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Internal server error")

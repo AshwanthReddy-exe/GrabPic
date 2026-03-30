@@ -1,6 +1,7 @@
 # ai-service/app/utils/image.py
 
 import cv2
+import numpy as np
 from app.config import settings
 
 
@@ -12,6 +13,19 @@ def load_image(path: str):
 
     if image is None:
         raise ValueError(f"Unable to load image: {path}")
+
+    return image
+
+
+def load_image_from_bytes(content: bytes):
+    """
+    Load image directly from bytes in memory.
+    """
+    np_arr = np.frombuffer(content, np.uint8)
+    image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+    if image is None:
+        raise ValueError("Unable to load image from bytes")
 
     return image
 
@@ -38,6 +52,17 @@ def preprocess_image(path: str):
     load → resize
     """
     image = load_image(path)
+    image = resize_image(image)
+
+    return image
+
+
+def preprocess_image_from_bytes(content: bytes):
+    """
+    Full preprocessing pipeline from bytes:
+    load → resize
+    """
+    image = load_image_from_bytes(content)
     image = resize_image(image)
 
     return image
